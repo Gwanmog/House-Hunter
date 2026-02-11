@@ -299,4 +299,4 @@ if st.button("Run analysis", type="primary"):
         st.error(f"Analysis failed: {exc}")
 
 st.markdown("---")
-st.caption("Tip: put RAPIDAPI_KEY in .house_hunter.env for API usage.")
+st.caption("Tip: set RAPIDAPI_KEY in Streamlit secrets (.streamlit/secrets.toml locally or app secrets in deployment).")

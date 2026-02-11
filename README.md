@@ -202,7 +202,7 @@ streamlit run streamlit_app.py
 
 1. Push this repo to GitHub.
 2. In Streamlit Community Cloud, create app from repo and set main file to `streamlit_app.py`.
-3. Add secrets in app settings (or local `.streamlit/secrets.toml`):
+3. Add secrets in app settings (or local `.streamlit/secrets.toml`, created from `.streamlit/secrets.toml.example`):
    - `RAPIDAPI_KEY = "your_key_here"`
    - optional defaults like `RAPIDAPI_HOST`, `RAPIDAPI_SALE_ENDPOINT`, `DEFAULT_LOCATION`, etc.
 4. Deploy.
