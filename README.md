@@ -202,8 +202,9 @@ streamlit run streamlit_app.py
 
 1. Push this repo to GitHub.
 2. In Streamlit Community Cloud, create app from repo and set main file to `streamlit_app.py`.
-3. Add secret in app settings:
+3. Add secrets in app settings (or local `.streamlit/secrets.toml`):
    - `RAPIDAPI_KEY = "your_key_here"`
+   - optional defaults like `RAPIDAPI_HOST`, `RAPIDAPI_SALE_ENDPOINT`, `DEFAULT_LOCATION`, etc.
 4. Deploy.
 
-The UI reads `.house_hunter.env` locally and allows API host/endpoint/method customization from the sidebar.
+The UI reads Streamlit secrets first (including `.streamlit/secrets.toml` locally), then falls back to code defaults, and allows API host/endpoint/method customization from the sidebar.

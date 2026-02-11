@@ -3,13 +3,35 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
 
 import pandas as pd
 import streamlit as st
 
 from app import load_listings, recommend, RentEstimator
+
+
+def secret_value(name: str, default):
+    try:
+        return st.secrets.get(name, default)
+    except Exception:
+        return default
+
+
+def secret_float(name: str, default: float) -> float:
+    value = secret_value(name, default)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def secret_int(name: str, default: int) -> int:
+    value = secret_value(name, default)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return int(default)
 
 
 st.set_page_config(page_title="House Hunter", layout="wide")
@@ -24,14 +46,16 @@ with st.sidebar:
     listings_csv = st.text_input("Listings CSV", value="data/listings_sample.csv")
     rental_comps_csv = st.text_input("Rental comps CSV (optional)", value="data/rental_comps_sample.csv")
 
-    rapidapi_host = st.text_input("RapidAPI Host", value="realty-in-us.p.rapidapi.com")
-    rapidapi_endpoint = st.text_input("RapidAPI Sale Endpoint", value="/properties/v3/list")
-    rapidapi_method = st.selectbox("RapidAPI Sale Method", ["POST", "GET"], index=0)
-    rapidapi_location_param = st.text_input("RapidAPI Sale Location Param", value="postal_code")
+    rapidapi_host = st.text_input("RapidAPI Host", value=secret_value("RAPIDAPI_HOST", "realty-in-us.p.rapidapi.com"))
+    rapidapi_endpoint = st.text_input("RapidAPI Sale Endpoint", value=secret_value("RAPIDAPI_SALE_ENDPOINT", "/properties/v3/list"))
+    rapidapi_method_default = str(secret_value("RAPIDAPI_SALE_METHOD", "POST")).upper()
+    rapidapi_method = st.selectbox("RapidAPI Sale Method", ["POST", "GET"], index=0 if rapidapi_method_default == "POST" else 1)
+    rapidapi_location_param = st.text_input("RapidAPI Sale Location Param", value=secret_value("RAPIDAPI_SALE_LOCATION_PARAM", "postal_code"))
 
-    rapidapi_rent_endpoint = st.text_input("RapidAPI Rent Endpoint", value="/properties/v3/list")
-    rapidapi_rent_method = st.selectbox("RapidAPI Rent Method", ["POST", "GET"], index=0)
-    rapidapi_rent_location_param = st.text_input("RapidAPI Rent Location Param", value="postal_code")
+    rapidapi_rent_endpoint = st.text_input("RapidAPI Rent Endpoint", value=secret_value("RAPIDAPI_RENT_ENDPOINT", "/properties/v3/list"))
+    rapidapi_rent_method_default = str(secret_value("RAPIDAPI_RENT_METHOD", "POST")).upper()
+    rapidapi_rent_method = st.selectbox("RapidAPI Rent Method", ["POST", "GET"], index=0 if rapidapi_rent_method_default == "POST" else 1)
+    rapidapi_rent_location_param = st.text_input("RapidAPI Rent Location Param", value=secret_value("RAPIDAPI_RENT_LOCATION_PARAM", "postal_code"))
 
     rapidapi_limit = st.slider("Sale API Limit", 20, 200, 100, step=20)
     rapidapi_rent_limit = st.slider("Rent API Limit", 20, 200, 120, step=20)
@@ -39,19 +63,19 @@ with st.sidebar:
 
 col_a, col_b, col_c = st.columns(3)
 with col_a:
-    location = st.text_input("Location (ZIP or State)", value="76131")
-    max_price = st.number_input("Max Purchase Price", min_value=50000, value=900000, step=10000)
-    max_down_payment = st.number_input("Max Down Payment", min_value=1000, value=300000, step=5000)
+    location = st.text_input("Location (ZIP or State)", value=str(secret_value("DEFAULT_LOCATION", "76131")))
+    max_price = st.number_input("Max Purchase Price", min_value=50000, value=secret_int("DEFAULT_MAX_PRICE", 900000), step=10000)
+    max_down_payment = st.number_input("Max Down Payment", min_value=1000, value=secret_int("DEFAULT_MAX_DOWN_PAYMENT", 300000), step=5000)
 
 with col_b:
-    interest_rate = st.number_input("Interest Rate (%)", min_value=0.0, value=5.75, step=0.1)
+    interest_rate = st.number_input("Interest Rate (%)", min_value=0.0, value=secret_float("DEFAULT_INTEREST_RATE", 5.75), step=0.1)
     loan_years = st.number_input("Loan Term (years)", min_value=5, value=30, step=5)
-    insurance_rate = st.number_input("Insurance Rate (annual pct of price)", min_value=0.0, value=0.0035, step=0.0005, format="%.4f")
+    insurance_rate = st.number_input("Insurance Rate (annual pct of price)", min_value=0.0, value=secret_float("DEFAULT_INSURANCE_RATE", 0.0035), step=0.0005, format="%.4f")
 
 with col_c:
-    maintenance_rate = st.number_input("Maintenance Rate (pct of rent)", min_value=0.0, value=0.05, step=0.01)
-    management_rate = st.number_input("Management Rate (pct of rent)", min_value=0.0, value=0.07, step=0.01)
-    vacancy_rate = st.number_input("Vacancy Rate (pct of rent)", min_value=0.0, value=0.03, step=0.01)
+    maintenance_rate = st.number_input("Maintenance Rate (pct of rent)", min_value=0.0, value=secret_float("DEFAULT_MAINTENANCE_RATE", 0.05), step=0.01)
+    management_rate = st.number_input("Management Rate (pct of rent)", min_value=0.0, value=secret_float("DEFAULT_MANAGEMENT_RATE", 0.07), step=0.01)
+    vacancy_rate = st.number_input("Vacancy Rate (pct of rent)", min_value=0.0, value=secret_float("DEFAULT_VACANCY_RATE", 0.03), step=0.01)
 
 with st.expander("Advanced preferences / scoring"):
     c1, c2, c3, c4, c5 = st.columns(5)
@@ -70,8 +94,8 @@ with st.expander("Advanced preferences / scoring"):
 
 
 rent_source = st.selectbox("Rent Source", ["hybrid", "rapidapi-realtor", "csv", "heuristic"], index=0)
-results = st.slider("Max recommendations", 5, 50, 25, step=5)
-min_rent_comps = st.slider("Minimum rent comps", 1, 20, 2)
+results = st.slider("Max recommendations", 5, 50, secret_int("DEFAULT_RESULTS", 25), step=5)
+min_rent_comps = st.slider("Minimum rent comps", 1, 20, secret_int("DEFAULT_MIN_RENT_COMPS", 2))
 
 if st.button("Run analysis", type="primary"):
     args = SimpleNamespace(
@@ -97,7 +121,7 @@ if st.button("Run analysis", type="primary"):
         management_rate=float(management_rate),
         vacancy_rate=float(vacancy_rate),
         results=int(results),
-        rapidapi_key=None,
+        rapidapi_key=secret_value("RAPIDAPI_KEY", None),
         config_file=".house_hunter.env",
         rapidapi_host=rapidapi_host,
         rapidapi_endpoint=rapidapi_endpoint,
