@@ -1,0 +1,9 @@
+listing_id,address,city,state,zip_code,price,sqft,bedrooms,bathrooms,year_built,lot_size_sqft,hoa_monthly
+1,501 Elm St,Dallas,TX,75201,285000,1750,3,2,1998,7200,0
+2,900 Pine Ave,Dallas,TX,75201,340000,2100,4,2.5,2006,8400,35
+3,44 Oak Ln,Dallas,TX,75201,229000,1450,3,2,1987,6000,0
+4,88 Juniper Rd,Austin,TX,78701,415000,1950,3,2.5,2015,5000,120
+5,77 Meadow Dr,Columbus,OH,43004,190000,1650,3,2,1992,9000,0
+6,19 Hillview Ct,Columbus,OH,43004,250000,2050,4,2.5,2003,10000,40
+7,12 Magnolia Way,Tampa,FL,33602,310000,1800,3,2,2001,6500,60
+8,301 Market St,Dallas,TX,75201,198000,1325,2,1.5,1979,4200,0
