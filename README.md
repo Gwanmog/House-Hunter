@@ -191,6 +191,8 @@ If you share one successful RapidAPI test request/response from the tester, we c
 
 A web UI is available in `streamlit_app.py`.
 
+The center panel contains the core underwriting inputs. All source/endpoints/scoring controls are under **Advanced settings** (collapsed by default).
+
 ### Run locally
 
 ```bash
@@ -204,10 +206,10 @@ streamlit run streamlit_app.py
 2. In Streamlit Community Cloud, create app from repo and set main file to `streamlit_app.py`.
 3. Add secrets in app settings (or local `.streamlit/secrets.toml`, created from `.streamlit/secrets.toml.example`):
    - `RAPIDAPI_KEY = "your_key_here"`
-   - optional defaults like `RAPIDAPI_HOST`, `RAPIDAPI_SALE_ENDPOINT`, `DEFAULT_LOCATION`, etc.
+   - optional defaults like `RAPIDAPI_HOST`, `RAPIDAPI_SALE_ENDPOINT`, `DEFAULT_LOCATION`, `DEFAULT_SOURCE`, `DEFAULT_RENT_SOURCE`, etc.
 4. Deploy.
 
-The UI reads Streamlit secrets first (including `.streamlit/secrets.toml` locally), then falls back to code defaults, and allows API host/endpoint/method customization from the sidebar.
+The UI reads Streamlit secrets first (including `.streamlit/secrets.toml` locally), then falls back to code defaults, and allows API host/endpoint/method customization from the Advanced settings panel.
 
 ### Verify Streamlit is using the API
 
