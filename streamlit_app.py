@@ -93,12 +93,44 @@ with st.expander("Advanced preferences / scoring"):
     weight_lot_size = w5.number_input("Weight Lot", min_value=0.0, value=1.0, step=0.5)
 
 
-rent_source = st.selectbox("Rent Source", ["hybrid", "rapidapi-realtor", "csv", "heuristic"], index=0)
-results = st.slider("Max recommendations", 5, 50, secret_int("DEFAULT_RESULTS", 25), step=5)
-min_rent_comps = st.slider("Minimum rent comps", 1, 20, secret_int("DEFAULT_MIN_RENT_COMPS", 2))
 
-if st.button("Run analysis", type="primary"):
-    args = SimpleNamespace(
+def build_args(
+    source,
+    listings_csv,
+    location,
+    max_price,
+    max_down_payment,
+    interest_rate,
+    loan_years,
+    target_sqft,
+    target_bedrooms,
+    target_bathrooms,
+    target_year_built,
+    target_lot_size,
+    weight_sqft,
+    weight_bedrooms,
+    weight_bathrooms,
+    weight_year_built,
+    weight_lot_size,
+    insurance_rate,
+    maintenance_rate,
+    management_rate,
+    vacancy_rate,
+    results,
+    rapidapi_host,
+    rapidapi_endpoint,
+    rapidapi_limit,
+    rapidapi_method,
+    rapidapi_location_param,
+    rent_source,
+    rental_comps_csv,
+    rapidapi_rent_endpoint,
+    rapidapi_rent_limit,
+    rapidapi_rent_method,
+    rapidapi_rent_location_param,
+    min_rent_comps,
+):
+    return SimpleNamespace(
         source=source,
         listings_csv=listings_csv,
         location=location,
@@ -137,6 +169,95 @@ if st.button("Run analysis", type="primary"):
         min_rent_comps=int(min_rent_comps),
     )
 
+rent_source = st.selectbox("Rent Source", ["hybrid", "rapidapi-realtor", "csv", "heuristic"], index=0)
+results = st.slider("Max recommendations", 5, 50, secret_int("DEFAULT_RESULTS", 25), step=5)
+min_rent_comps = st.slider("Minimum rent comps", 1, 20, secret_int("DEFAULT_MIN_RENT_COMPS", 2))
+
+
+st.subheader("API connectivity check")
+if st.button("Test RapidAPI listing fetch"):
+    test_args = build_args(
+        "rapidapi-realtor",
+        listings_csv,
+        location,
+        max_price,
+        max_down_payment,
+        interest_rate,
+        loan_years,
+        target_sqft,
+        target_bedrooms,
+        target_bathrooms,
+        target_year_built,
+        target_lot_size,
+        weight_sqft,
+        weight_bedrooms,
+        weight_bathrooms,
+        weight_year_built,
+        weight_lot_size,
+        insurance_rate,
+        maintenance_rate,
+        management_rate,
+        vacancy_rate,
+        5,
+        rapidapi_host,
+        rapidapi_endpoint,
+        5,
+        rapidapi_method,
+        rapidapi_location_param,
+        "heuristic",
+        rental_comps_csv,
+        rapidapi_rent_endpoint,
+        5,
+        rapidapi_rent_method,
+        rapidapi_rent_location_param,
+        1,
+    )
+    try:
+        fetched = load_listings(test_args)
+        st.success(f"API fetch successful. Retrieved {len(fetched)} listing(s).")
+        if fetched:
+            sample = fetched[0]
+            st.caption(f"Sample: {sample.address}, {sample.city}, {sample.state} {sample.zip_code} | ${sample.price:,.0f}")
+    except Exception as exc:
+        st.error(f"API fetch failed: {exc}")
+
+if st.button("Run analysis", type="primary"):
+    args = build_args(
+        source,
+        listings_csv,
+        location,
+        max_price,
+        max_down_payment,
+        interest_rate,
+        loan_years,
+        target_sqft,
+        target_bedrooms,
+        target_bathrooms,
+        target_year_built,
+        target_lot_size,
+        weight_sqft,
+        weight_bedrooms,
+        weight_bathrooms,
+        weight_year_built,
+        weight_lot_size,
+        insurance_rate,
+        maintenance_rate,
+        management_rate,
+        vacancy_rate,
+        results,
+        rapidapi_host,
+        rapidapi_endpoint,
+        rapidapi_limit,
+        rapidapi_method,
+        rapidapi_location_param,
+        rent_source,
+        rental_comps_csv,
+        rapidapi_rent_endpoint,
+        rapidapi_rent_limit,
+        rapidapi_rent_method,
+        rapidapi_rent_location_param,
+        min_rent_comps,
+    )
     try:
         listings = load_listings(args)
         estimator = RentEstimator(args)

@@ -208,3 +208,12 @@ streamlit run streamlit_app.py
 4. Deploy.
 
 The UI reads Streamlit secrets first (including `.streamlit/secrets.toml` locally), then falls back to code defaults, and allows API host/endpoint/method customization from the sidebar.
+
+### Verify Streamlit is using the API
+
+In the UI, use **"Test RapidAPI listing fetch"**.
+
+- Success means Streamlit reached the API and parsed listing records.
+- Failure shows the exact exception (bad key/host/endpoint/params).
+
+This is the quickest way to confirm API wiring before running full underwriting.
