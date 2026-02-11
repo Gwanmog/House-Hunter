@@ -1,0 +1,7 @@
+comp_id,address,city,state,zip_code,monthly_rent,sqft,bedrooms,bathrooms,year_built,lot_size_sqft
+r1,350 Main St Apt A,Dallas,TX,75201,2425,1700,3,2,1997,0
+r2,112 Commerce St,Dallas,TX,75201,2600,1850,3,2.5,2004,0
+r3,88 Cedar Ave,Dallas,TX,75201,2150,1500,3,2,1988,0
+r4,99 Oakview Rd,Dallas,TX,75201,2950,2150,4,2.5,2007,0
+r5,21 Pinecrest Dr,Dallas,TX,75201,1800,1300,2,1.5,1980,0
+r6,455 Lake St,Austin,TX,78701,3200,1900,3,2.5,2014,0
