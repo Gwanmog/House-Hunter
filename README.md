@@ -72,8 +72,6 @@ python3 app.py \
 
 If your subscribed API uses a different path or query format, set the endpoint accordingly.
 
-For-sale API requests now also include body/query filters derived from your underwriting inputs (for example `list_price.max` from `--max-price`) so fetched listings better match your buy box.
-
 ### Secrets / key storage
 
 You can store secrets locally in a config file so you don't paste keys every run.
@@ -173,7 +171,6 @@ Do this on RapidAPI website (API tester), then mirror values in CLI:
 3. For rental comps endpoint, repeat mapping with `--rapidapi-rent-*` flags.
 4. Ensure plan includes both for-sale and for-rent endpoints when using `--rent-source hybrid`.
 5. Confirm quota and billing are active.
-6. If command returns no deals, it may still be working; that means the returned properties fail positive-cashflow checks under your assumptions.
 
 If you share one successful RapidAPI test request/response from the tester, we can tune the final field mapping in minutes.
 

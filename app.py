@@ -297,7 +297,6 @@ def _build_api_request(
     key: str,
     method: str = "GET",
     purpose: str = "sale",
-    extra_filters: Optional[Dict[str, Any]] = None,
 ) -> urllib.request.Request:
     normalized_endpoint = endpoint.strip()
     if not normalized_endpoint.startswith("/"):
@@ -320,17 +319,12 @@ def _build_api_request(
             "status": status,
             "sort": {"direction": "desc", "field": "list_date"},
         }
-        if extra_filters:
-            payload.update(extra_filters)
         body = json.dumps(payload).encode("utf-8")
         headers["Content-Type"] = "application/json"
         url = f"https://{host}{normalized_endpoint}"
         return urllib.request.Request(url, headers=headers, method="POST", data=body)
 
-    query_params: Dict[str, Any] = {location_param: location_value, "offset": 0, "limit": limit, "sort": "relevance"}
-    if extra_filters:
-        query_params.update(extra_filters)
-    query = urllib.parse.urlencode(query_params)
+    query = urllib.parse.urlencode({location_param: location_value, "offset": 0, "limit": limit, "sort": "relevance"})
     url = f"https://{host}{normalized_endpoint}?{query}"
     return urllib.request.Request(url, headers=headers, method="GET")
 
@@ -361,16 +355,6 @@ def get_rapidapi_key(args: argparse.Namespace) -> str:
     return key
 
 
-def build_sale_api_filters(args: argparse.Namespace) -> Dict[str, Any]:
-    # Keep API responses aligned with underwriting constraints to reduce noise.
-    return {
-        "list_price": {"max": args.max_price},
-        "beds": {"min": max(0, int(args.target_bedrooms) - 1)},
-        "baths": {"min": max(0, int(args.target_bathrooms) - 1)},
-        "sqft": {"min": max(500, int(args.target_sqft * 0.6))},
-    }
-
-
 def load_listings_from_rapidapi_realtor(args: argparse.Namespace) -> List[Listing]:
     key = get_rapidapi_key(args)
     if len(args.location) == 2 and args.location.isalpha():
@@ -385,7 +369,6 @@ def load_listings_from_rapidapi_realtor(args: argparse.Namespace) -> List[Listin
         key=key,
         method=args.rapidapi_method,
         purpose="sale",
-        extra_filters=build_sale_api_filters(args),
     )
     try:
         payload = _read_api_payload(req)
@@ -522,7 +505,6 @@ class RentEstimator:
             key=key,
             method=self.args.rapidapi_rent_method,
             purpose="rent",
-            extra_filters=None,
         )
         payload = _read_api_payload(req)
         comps = [listing_from_realtor(item) for item in _extract_results(payload)]
@@ -640,7 +622,6 @@ def recommend(listings: Iterable[Listing], args: argparse.Namespace, rent_estima
 def render(recommendations: List[Analysis], args: argparse.Namespace) -> None:
     if not recommendations:
         print("No positive-cashflow houses found with current constraints.")
-        print("Try one or more adjustments: increase --max-down-payment, lower --max-price, or reduce maintenance/management/vacancy assumptions.")
         return
 
     print(
