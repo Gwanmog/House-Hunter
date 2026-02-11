@@ -12,6 +12,7 @@ import csv
 import json
 import math
 import os
+import re
 import sys
 import urllib.parse
 import urllib.request
@@ -258,6 +259,61 @@ def load_listings_from_csv(csv_path: Path) -> List[Listing]:
     return listings
 
 
+def extract_hoa_monthly(item: Dict[str, Any], description: Dict[str, Any]) -> float:
+    """Best-effort extraction of HOA monthly amount from variant API fields."""
+    candidates = [
+        item.get("hoa_fee"),
+        item.get("hoa"),
+        item.get("monthly_hoa_fee"),
+        item.get("hoa_monthly"),
+        description.get("hoa_fee"),
+        description.get("hoa"),
+        description.get("monthly_hoa_fee"),
+        description.get("hoa_monthly"),
+    ]
+
+    for value in candidates:
+        amount = safe_float(value, 0)
+        if amount > 0:
+            return amount
+
+    # Some providers send HOA in nested structures and/or annual totals.
+    nested_hoa = pick_first(
+        item.get("hoa"),
+        description.get("hoa"),
+        item.get("association"),
+        description.get("association"),
+        default={},
+    )
+    if isinstance(nested_hoa, dict):
+        periodic = safe_float(
+            pick_first(
+                nested_hoa.get("monthly_fee"),
+                nested_hoa.get("fee_monthly"),
+                nested_hoa.get("hoa_fee"),
+                nested_hoa.get("fee"),
+                default=0,
+            ),
+            0,
+        )
+        if periodic > 0:
+            return periodic
+
+        annual = safe_float(
+            pick_first(
+                nested_hoa.get("annual_fee"),
+                nested_hoa.get("yearly_fee"),
+                nested_hoa.get("fee_annual"),
+                default=0,
+            ),
+            0,
+        )
+        if annual > 0:
+            return annual / 12
+
+    return 0.0
+
+
 def listing_from_realtor(item: Dict[str, Any]) -> Optional[Listing]:
     location = item.get("location", {})
     address = location.get("address", {})
@@ -284,7 +340,7 @@ def listing_from_realtor(item: Dict[str, Any]) -> Optional[Listing]:
         bathrooms=safe_float(pick_first(description.get("baths"), item.get("baths"), default=0)),
         year_built=safe_int(pick_first(description.get("year_built"), item.get("year_built"), default=1980), 1980),
         lot_size_sqft=safe_float(pick_first(description.get("lot_sqft"), item.get("lot_sqft"), default=0)),
-        hoa_monthly=safe_float(pick_first(description.get("hoa_fee"), item.get("hoa_fee"), default=0)),
+        hoa_monthly=extract_hoa_monthly(item, description),
     )
 
 
@@ -297,6 +353,7 @@ def _build_api_request(
     key: str,
     method: str = "GET",
     purpose: str = "sale",
+    extra_filters: Optional[Dict[str, Any]] = None,
 ) -> urllib.request.Request:
     normalized_endpoint = endpoint.strip()
     if not normalized_endpoint.startswith("/"):
@@ -319,12 +376,17 @@ def _build_api_request(
             "status": status,
             "sort": {"direction": "desc", "field": "list_date"},
         }
+        if extra_filters:
+            payload.update(extra_filters)
         body = json.dumps(payload).encode("utf-8")
         headers["Content-Type"] = "application/json"
         url = f"https://{host}{normalized_endpoint}"
         return urllib.request.Request(url, headers=headers, method="POST", data=body)
 
-    query = urllib.parse.urlencode({location_param: location_value, "offset": 0, "limit": limit, "sort": "relevance"})
+    query_params: Dict[str, Any] = {location_param: location_value, "offset": 0, "limit": limit, "sort": "relevance"}
+    if extra_filters:
+        query_params.update(extra_filters)
+    query = urllib.parse.urlencode(query_params)
     url = f"https://{host}{normalized_endpoint}?{query}"
     return urllib.request.Request(url, headers=headers, method="GET")
 
@@ -355,6 +417,16 @@ def get_rapidapi_key(args: argparse.Namespace) -> str:
     return key
 
 
+def build_sale_api_filters(args: argparse.Namespace) -> Dict[str, Any]:
+    # Keep API responses aligned with underwriting constraints to reduce noise.
+    return {
+        "list_price": {"max": args.max_price},
+        "beds": {"min": max(0, int(args.target_bedrooms) - 1)},
+        "baths": {"min": max(0, int(args.target_bathrooms) - 1)},
+        "sqft": {"min": max(500, int(args.target_sqft * 0.6))},
+    }
+
+
 def load_listings_from_rapidapi_realtor(args: argparse.Namespace) -> List[Listing]:
     key = get_rapidapi_key(args)
     if len(args.location) == 2 and args.location.isalpha():
@@ -369,6 +441,7 @@ def load_listings_from_rapidapi_realtor(args: argparse.Namespace) -> List[Listin
         key=key,
         method=args.rapidapi_method,
         purpose="sale",
+        extra_filters=build_sale_api_filters(args),
     )
     try:
         payload = _read_api_payload(req)
@@ -505,6 +578,7 @@ class RentEstimator:
             key=key,
             method=self.args.rapidapi_rent_method,
             purpose="rent",
+            extra_filters=None,
         )
         payload = _read_api_payload(req)
         comps = [listing_from_realtor(item) for item in _extract_results(payload)]
@@ -596,6 +670,55 @@ def analyze_listing(listing: Listing, args: argparse.Namespace, rent_estimator: 
     )
 
 
+
+def normalize_address_key(address: str) -> str:
+    normalized = (address or "").lower()
+    replacements = {
+        "street": "st",
+        "st.": "st",
+        "road": "rd",
+        "rd.": "rd",
+        "drive": "dr",
+        "dr.": "dr",
+        "avenue": "ave",
+        "ave.": "ave",
+        "lane": "ln",
+        "ln.": "ln",
+        "boulevard": "blvd",
+        "blvd.": "blvd",
+        "court": "ct",
+        "ct.": "ct",
+        "trail": "trl",
+        "trl.": "trl",
+        "place": "pl",
+        "pl.": "pl",
+        "way": "wy",
+        "wy.": "wy",
+    }
+    for src, dst in replacements.items():
+        normalized = re.sub(rf"\b{re.escape(src)}\b", dst, normalized)
+
+    normalized = re.sub(r"[^a-z0-9]", "", normalized)
+    return normalized
+
+
+def deduplicate_analyses(analyses: List[Analysis]) -> List[Analysis]:
+    """Keep one recommendation per normalized address+ZIP, choosing best cashflow."""
+    best_by_property: Dict[str, Analysis] = {}
+    for analysis in analyses:
+        key = f"{normalize_address_key(analysis.listing.address)}|{analysis.listing.zip_code}"
+        existing = best_by_property.get(key)
+        if existing is None:
+            best_by_property[key] = analysis
+            continue
+
+        if analysis.monthly_net_cashflow > existing.monthly_net_cashflow:
+            best_by_property[key] = analysis
+        elif analysis.monthly_net_cashflow == existing.monthly_net_cashflow and analysis.listing.price < existing.listing.price:
+            best_by_property[key] = analysis
+
+    return list(best_by_property.values())
+
 def recommend(listings: Iterable[Listing], args: argparse.Namespace, rent_estimator: RentEstimator) -> List[Analysis]:
     filtered = [
         l
@@ -607,8 +730,9 @@ def recommend(listings: Iterable[Listing], args: argparse.Namespace, rent_estima
 
     analyzed = [analyze_listing(l, args, rent_estimator) for l in filtered]
     positive = [a for a in analyzed if a.monthly_net_cashflow > 0]
+    deduplicated = deduplicate_analyses(positive)
 
-    positive.sort(
+    deduplicated.sort(
         key=lambda a: (
             a.monthly_net_cashflow,
             a.annual_cash_on_cash_return,
@@ -616,12 +740,13 @@ def recommend(listings: Iterable[Listing], args: argparse.Namespace, rent_estima
         ),
         reverse=True,
     )
-    return positive[: args.results]
+    return deduplicated[: args.results]
 
 
 def render(recommendations: List[Analysis], args: argparse.Namespace) -> None:
     if not recommendations:
         print("No positive-cashflow houses found with current constraints.")
+        print("Try one or more adjustments: increase --max-down-payment, lower --max-price, or reduce maintenance/management/vacancy assumptions.")
         return
 
     print(

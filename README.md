@@ -36,6 +36,8 @@ For each listing:
 
 Output includes **only listings with net cashflow > 0**.
 
+If multiple listings represent the same address in the same ZIP, the app keeps only one (the variant with best monthly net cashflow).
+
 ## Data sources for for-sale homes
 
 ### CSV mode (default)
@@ -71,6 +73,8 @@ python3 app.py \
 ```
 
 If your subscribed API uses a different path or query format, set the endpoint accordingly.
+
+For-sale API requests now also include body/query filters derived from your underwriting inputs (for example `list_price.max` from `--max-price`) so fetched listings better match your buy box.
 
 ### Secrets / key storage
 
@@ -171,6 +175,7 @@ Do this on RapidAPI website (API tester), then mirror values in CLI:
 3. For rental comps endpoint, repeat mapping with `--rapidapi-rent-*` flags.
 4. Ensure plan includes both for-sale and for-rent endpoints when using `--rent-source hybrid`.
 5. Confirm quota and billing are active.
+6. If command returns no deals, it may still be working; that means the returned properties fail positive-cashflow checks under your assumptions.
 
 If you share one successful RapidAPI test request/response from the tester, we can tune the final field mapping in minutes.
 
@@ -178,4 +183,5 @@ If you share one successful RapidAPI test request/response from the tester, we c
 
 - This tool is an underwriting helper, not financial advice.
 - Replace assumptions with local market data before investment decisions.
+- HOA values are best-effort from listing feed fields; verify HOA manually when underwriting final deals.
 - If a key is exposed in chat/commits, rotate it immediately.
