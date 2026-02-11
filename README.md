@@ -185,3 +185,25 @@ If you share one successful RapidAPI test request/response from the tester, we c
 - Replace assumptions with local market data before investment decisions.
 - HOA values are best-effort from listing feed fields; verify HOA manually when underwriting final deals.
 - If a key is exposed in chat/commits, rotate it immediately.
+
+
+## Streamlit UI (deployment-ready)
+
+A web UI is available in `streamlit_app.py`.
+
+### Run locally
+
+```bash
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
+### Deploy quickly (Streamlit Community Cloud)
+
+1. Push this repo to GitHub.
+2. In Streamlit Community Cloud, create app from repo and set main file to `streamlit_app.py`.
+3. Add secret in app settings:
+   - `RAPIDAPI_KEY = "your_key_here"`
+4. Deploy.
+
+The UI reads `.house_hunter.env` locally and allows API host/endpoint/method customization from the sidebar.
