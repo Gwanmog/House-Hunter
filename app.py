@@ -223,6 +223,10 @@ def pick_first(*values: Any, default: Any = None) -> Any:
     return default
 
 
+def as_dict(value: Any) -> Dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def matches_location(listing: Listing, location: str) -> bool:
     location_type, city, state, zip_code = parse_location(location)
     if location_type == "state":
@@ -303,6 +307,8 @@ def load_listings_from_csv(csv_path: Path) -> List[Listing]:
 
 def extract_hoa_monthly(item: Dict[str, Any], description: Dict[str, Any]) -> float:
     """Best-effort extraction of HOA monthly amount from variant API fields."""
+    item = as_dict(item)
+    description = as_dict(description)
     candidates = [
         item.get("hoa_fee"),
         item.get("hoa"),
@@ -373,9 +379,12 @@ def extract_hoa_monthly(item: Dict[str, Any], description: Dict[str, Any]) -> fl
 
 
 def listing_from_realtor(item: Dict[str, Any]) -> Optional[Listing]:
-    location = item.get("location", {})
-    address = location.get("address", {})
-    description = item.get("description", {})
+    if not isinstance(item, dict):
+        return None
+
+    location = as_dict(item.get("location"))
+    address = as_dict(location.get("address"))
+    description = as_dict(item.get("description"))
 
     list_price = pick_first(item.get("list_price"), description.get("price"), item.get("price"), default=0)
     if safe_float(list_price) <= 0:
@@ -472,6 +481,7 @@ def _read_api_payload(req: urllib.request.Request) -> Dict[str, Any]:
 
 
 def _extract_results(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    payload = as_dict(payload)
     candidates = (
         payload.get("data", {}).get("home_search", {}).get("results")
         or payload.get("data", {}).get("results")
