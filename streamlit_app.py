@@ -52,11 +52,11 @@ def fetch_market_rate() -> float | None:
 
 
 def build_args(**kwargs):
-    return SimpleNamespace(
-        **kwargs,
-        rapidapi_key=secret_value("RAPIDAPI_KEY", None),
-        config_file=".house_hunter.env",
-    )
+    # Avoid duplicate-key collisions when callers pass vars(existing_namespace).
+    kwargs = dict(kwargs)
+    kwargs["rapidapi_key"] = secret_value("RAPIDAPI_KEY", kwargs.get("rapidapi_key"))
+    kwargs.setdefault("config_file", ".house_hunter.env")
+    return SimpleNamespace(**kwargs)
 
 
 st.set_page_config(page_title="House Hunter", layout="wide")
