@@ -91,7 +91,13 @@ with col_c:
     vacancy_rate = st.number_input("Vacancy Rate (pct of rent)", min_value=0.0, value=secret_float("DEFAULT_VACANCY_RATE", 0.05), step=0.01, help="Example: 8.3% means ~1 month vacant per year. 4.2% means ~2 weeks.")
     pmi_rate = st.number_input("PMI rate when <20% down (annual)", min_value=0.0, value=0.008, step=0.001, format="%.3f")
 
-property_types = st.multiselect("Property type filter", ["single_family", "condo", "townhome", "multi_family", "apartment"], default=[])
+st.markdown("**Property type filter**")
+_property_type_options = ["single_family", "condo", "townhome", "multi_family", "apartment"]
+pt_cols = st.columns(3)
+property_types = []
+for i, option in enumerate(_property_type_options):
+    if pt_cols[i % 3].checkbox(option.replace("_", " ").title(), value=False, key=f"property_type_{option}"):
+        property_types.append(option)
 
 st.info("Default mode uses live API listings. Most developer/API settings stay hidden in Advanced.")
 
