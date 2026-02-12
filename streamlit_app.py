@@ -212,6 +212,24 @@ args = build_args(
     min_bathrooms=float(min_bathrooms),
 )
 
+if st.button("Test RapidAPI listing fetch"):
+    test_args = build_args(**vars(args))
+    test_args.source = "rapidapi-realtor"
+    test_args.rent_source = "heuristic"
+    test_args.rapidapi_limit = min(5, int(args.rapidapi_limit))
+    try:
+        fetched = load_listings(test_args)
+        st.success(f"API fetch successful. Retrieved {len(fetched)} listing(s).")
+        if fetched:
+            sample = fetched[0]
+            st.caption(f"Sample: {sample.address}, {sample.city}, {sample.state} {sample.zip_code} | ${sample.price:,.0f}")
+    except Exception as exc:
+        st.error(f"API fetch failed: {exc}")
+        st.caption(
+            "Quick checks: confirm RAPIDAPI_KEY, host, endpoint, method (POST/GET), and location param. "
+            "If you changed provider fields in Advanced, try restoring defaults."
+        )
+
 if st.button("Run analysis", type="primary"):
     now = pd.Timestamp.utcnow().timestamp()
     recent = [t for t in st.session_state.analysis_calls if now - t < 60]

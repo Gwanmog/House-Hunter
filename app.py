@@ -14,6 +14,7 @@ import math
 import os
 import re
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -451,8 +452,23 @@ def _build_api_request(
 
 
 def _read_api_payload(req: urllib.request.Request) -> Dict[str, Any]:
-    with urllib.request.urlopen(req, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=30) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        body = ""
+        try:
+            body = exc.read().decode("utf-8", errors="replace")
+        except Exception:
+            body = ""
+        snippet = body[:500].replace("\n", " ").strip()
+        detail = f"HTTP {exc.code} {exc.reason}" if exc.reason else f"HTTP {exc.code}"
+        if snippet:
+            raise RuntimeError(f"RapidAPI request failed: {detail}. Response: {snippet}") from exc
+        raise RuntimeError(f"RapidAPI request failed: {detail}.") from exc
+    except urllib.error.URLError as exc:
+        reason = getattr(exc, "reason", exc)
+        raise RuntimeError(f"RapidAPI request failed: network/DNS issue ({reason}).") from exc
 
 
 def _extract_results(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -523,7 +539,8 @@ def load_listings_from_rapidapi_realtor(args: argparse.Namespace) -> List[Listin
         payload = _read_api_payload(req)
     except Exception as exc:
         raise RuntimeError(
-            "RapidAPI for-sale request failed. Verify host/endpoint, subscription status, API key, and network access."
+            f"RapidAPI for-sale request failed for host={args.rapidapi_host}, endpoint={args.rapidapi_endpoint}, "
+            f"method={args.rapidapi_method}, location_param={location_param}, location={location_value}. {exc}"
         ) from exc
 
     listings = [listing_from_realtor(item) for item in _extract_results(payload)]
