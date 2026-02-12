@@ -74,6 +74,16 @@ STATE_PROPERTY_TAX_RATES = {
     "WY": 0.0058,
 }
 
+STATE_INSURANCE_FACTORS = {
+    "CA": 1.15,
+    "FL": 1.35,
+    "TX": 1.25,
+    "LA": 1.3,
+    "CO": 1.15,
+    "OK": 1.2,
+    "NY": 1.1,
+}
+
 
 @dataclass
 class Listing:
@@ -89,6 +99,8 @@ class Listing:
     year_built: int
     lot_size_sqft: float
     hoa_monthly: float
+    property_type: str = "unknown"
+    listing_url: str = ""
 
 
 @dataclass
@@ -109,6 +121,8 @@ class Analysis:
     monthly_net_cashflow: float
     annual_cash_on_cash_return: float
     down_payment: float
+    down_payment_pct: float
+    monthly_pmi: float
 
 
 def parse_args() -> argparse.Namespace:
@@ -137,6 +151,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--maintenance-rate", type=float, default=0.08, help="Monthly maintenance as pct of rent.")
     parser.add_argument("--management-rate", type=float, default=0.10, help="Monthly management fee as pct of rent.")
     parser.add_argument("--vacancy-rate", type=float, default=0.05, help="Monthly vacancy reserve as pct of rent.")
+    parser.add_argument("--pmi-rate", type=float, default=0.008, help="Annual PMI rate applied when down payment is below 20%.")
+    parser.add_argument("--landlord-insurance-multiplier", type=float, default=1.15, help="Multiplier to adjust homeowners insurance toward landlord policy estimates.")
     parser.add_argument("--results", type=int, default=10, help="Max recommendations returned.")
 
     parser.add_argument("--rapidapi-key", help="RapidAPI key (CLI override).")
@@ -154,6 +170,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rapidapi-rent-method", choices=["GET", "POST"], default="GET", help="HTTP method for rental comp endpoint.")
     parser.add_argument("--rapidapi-rent-location-param", default="zip", help="Rental comp location parameter key.")
     parser.add_argument("--min-rent-comps", type=int, default=3, help="Minimum comps required before using comp-based rent.")
+    parser.add_argument("--property-types", default="", help="Comma-separated property types to include (e.g. condo,single_family).")
+    parser.add_argument("--min-bedrooms", type=float, default=0, help="Minimum bedrooms filter.")
+    parser.add_argument("--min-bathrooms", type=float, default=0, help="Minimum bathrooms filter.")
 
     args = parser.parse_args()
     if args.source == "csv" and not args.listings_csv:
@@ -204,10 +223,30 @@ def pick_first(*values: Any, default: Any = None) -> Any:
 
 
 def matches_location(listing: Listing, location: str) -> bool:
+    location_type, city, state, zip_code = parse_location(location)
+    if location_type == "state":
+        return listing.state == state
+    if location_type == "city":
+        city_match = listing.city.strip().upper() == city
+        if state:
+            return city_match and listing.state == state
+        return city_match
+    return listing.zip_code == zip_code
+
+
+def parse_location(location: str) -> tuple[str, str, str, str]:
     normalized = location.strip().upper()
+    if re.fullmatch(r"\d{5}", normalized):
+        return "zip", "", "", normalized
     if len(normalized) == 2 and normalized.isalpha():
-        return listing.state == normalized
-    return listing.zip_code == normalized
+        return "state", "", normalized, ""
+
+    city = normalized
+    state = ""
+    if "," in normalized:
+        city, state = [part.strip() for part in normalized.split(",", 1)]
+        state = state[:2]
+    return "city", city, state, ""
 
 
 def similarity_weight(subject: Listing, comp: Listing) -> float:
@@ -254,6 +293,8 @@ def load_listings_from_csv(csv_path: Path) -> List[Listing]:
                     year_built=safe_int(row.get("year_built"), 1980),
                     lot_size_sqft=safe_float(row.get("lot_size_sqft")),
                     hoa_monthly=safe_float(row.get("hoa_monthly"), 0),
+                    property_type=str(row.get("property_type") or row.get("prop_type") or "unknown"),
+                    listing_url=str(row.get("listing_url") or row.get("url") or ""),
                 )
             )
     return listings
@@ -270,6 +311,8 @@ def extract_hoa_monthly(item: Dict[str, Any], description: Dict[str, Any]) -> fl
         description.get("hoa"),
         description.get("monthly_hoa_fee"),
         description.get("hoa_monthly"),
+        item.get("hoa_fee_per_month"),
+        description.get("hoa_fee_per_month"),
     ]
 
     for value in candidates:
@@ -311,6 +354,20 @@ def extract_hoa_monthly(item: Dict[str, Any], description: Dict[str, Any]) -> fl
         if annual > 0:
             return annual / 12
 
+    text_blob = " ".join(
+        [
+            str(item.get("remarks") or ""),
+            str(description.get("text") or ""),
+            str(description.get("description") or ""),
+        ]
+    )
+    match = re.search(r"hoa[^$\d]{0,24}\$?([\d,]{2,7})(?:\s*/\s*(mo|month|yr|year))?", text_blob, re.IGNORECASE)
+    if match:
+        amount = safe_float(match.group(1).replace(",", ""), 0)
+        cadence = (match.group(2) or "mo").lower()
+        if amount > 0:
+            return amount / 12 if cadence in {"yr", "year"} else amount
+
     return 0.0
 
 
@@ -341,6 +398,8 @@ def listing_from_realtor(item: Dict[str, Any]) -> Optional[Listing]:
         year_built=safe_int(pick_first(description.get("year_built"), item.get("year_built"), default=1980), 1980),
         lot_size_sqft=safe_float(pick_first(description.get("lot_sqft"), item.get("lot_sqft"), default=0)),
         hoa_monthly=extract_hoa_monthly(item, description),
+        property_type=str(pick_first(description.get("type"), description.get("property_type"), item.get("prop_type"), default="unknown")),
+        listing_url=str(pick_first(item.get("href"), item.get("permalink"), item.get("rdc_web_url"), default="")),
     )
 
 
@@ -419,29 +478,46 @@ def get_rapidapi_key(args: argparse.Namespace) -> str:
 
 def build_sale_api_filters(args: argparse.Namespace) -> Dict[str, Any]:
     # Keep API responses aligned with underwriting constraints to reduce noise.
-    return {
+    filters: Dict[str, Any] = {
         "list_price": {"max": args.max_price},
-        "beds": {"min": max(0, int(args.target_bedrooms) - 1)},
-        "baths": {"min": max(0, int(args.target_bathrooms) - 1)},
+        "beds": {"min": max(args.min_bedrooms, int(args.target_bedrooms) - 1)},
+        "baths": {"min": max(args.min_bathrooms, int(args.target_bathrooms) - 1)},
         "sqft": {"min": max(500, int(args.target_sqft * 0.6))},
     }
+    property_types = [p.strip() for p in str(args.property_types).split(",") if p.strip()]
+    if property_types:
+        filters["prop_type"] = property_types
+    return filters
 
 
 def load_listings_from_rapidapi_realtor(args: argparse.Namespace) -> List[Listing]:
     key = get_rapidapi_key(args)
-    if len(args.location) == 2 and args.location.isalpha():
-        raise ValueError("For rapidapi-realtor source, use ZIP in --location (state-only searches are not supported).")
+
+    location_type, city, state, zip_code = parse_location(args.location)
+    location_param = args.rapidapi_location_param
+    location_value = args.location
+    filters = build_sale_api_filters(args)
+    if location_type == "city":
+        location_param = "city"
+        location_value = city.title()
+        if state:
+            filters["state_code"] = state
+    elif location_type == "state":
+        location_param = "state_code"
+        location_value = state
+    elif location_type == "zip":
+        location_value = zip_code
 
     req = _build_api_request(
         host=args.rapidapi_host,
         endpoint=args.rapidapi_endpoint,
-        location_param=args.rapidapi_location_param,
-        location_value=args.location,
+        location_param=location_param,
+        location_value=location_value,
         limit=args.rapidapi_limit,
         key=key,
         method=args.rapidapi_method,
         purpose="sale",
-        extra_filters=build_sale_api_filters(args),
+        extra_filters=filters,
     )
     try:
         payload = _read_api_payload(req)
@@ -549,6 +625,8 @@ def _load_rental_comps_csv(path: Path) -> List[Listing]:
                     year_built=safe_int(row.get("year_built"), 1980),
                     lot_size_sqft=safe_float(row.get("lot_size_sqft")),
                     hoa_monthly=0.0,
+                    property_type=str(row.get("property_type") or "rental"),
+                    listing_url=str(row.get("listing_url") or row.get("url") or ""),
                 )
             )
     return comps
@@ -631,7 +709,13 @@ def analyze_listing(listing: Listing, args: argparse.Namespace, rent_estimator: 
 
     property_tax_rate = STATE_PROPERTY_TAX_RATES.get(listing.state, 0.011)
     monthly_taxes = listing.price * property_tax_rate / 12
-    monthly_insurance = listing.price * args.insurance_rate / 12
+    insurance_factor = STATE_INSURANCE_FACTORS.get(listing.state, 1.0)
+    monthly_insurance = listing.price * args.insurance_rate * args.landlord_insurance_multiplier * insurance_factor / 12
+    down_payment_pct = (down_payment / listing.price) if listing.price > 0 else 1.0
+    monthly_pmi = 0.0
+    if down_payment_pct < 0.2 and principal > 0:
+        monthly_pmi = principal * args.pmi_rate / 12
+
     monthly_maintenance = estimated_rent * args.maintenance_rate
     monthly_management = estimated_rent * args.management_rate
     monthly_vacancy = estimated_rent * args.vacancy_rate
@@ -643,6 +727,7 @@ def analyze_listing(listing: Listing, args: argparse.Namespace, rent_estimator: 
         + monthly_maintenance
         + monthly_management
         + monthly_vacancy
+        + monthly_pmi
         + listing.hoa_monthly
     )
     monthly_net_cashflow = estimated_rent - monthly_total_costs
@@ -667,6 +752,8 @@ def analyze_listing(listing: Listing, args: argparse.Namespace, rent_estimator: 
         monthly_net_cashflow=monthly_net_cashflow,
         annual_cash_on_cash_return=annual_cash_on_cash_return,
         down_payment=down_payment,
+        down_payment_pct=down_payment_pct * 100,
+        monthly_pmi=monthly_pmi,
     )
 
 
@@ -720,11 +807,15 @@ def deduplicate_analyses(analyses: List[Analysis]) -> List[Analysis]:
     return list(best_by_property.values())
 
 def recommend(listings: Iterable[Listing], args: argparse.Namespace, rent_estimator: RentEstimator) -> List[Analysis]:
+    property_types = {p.strip().lower() for p in str(args.property_types).split(",") if p.strip()}
     filtered = [
         l
         for l in listings
         if matches_location(l, args.location)
         and l.price <= args.max_price
+        and l.bedrooms >= args.min_bedrooms
+        and l.bathrooms >= args.min_bathrooms
+        and (not property_types or l.property_type.lower() in property_types)
         and min(args.max_down_payment, l.price) > 0
     ]
 
@@ -770,7 +861,7 @@ def render(recommendations: List[Analysis], args: argparse.Namespace) -> None:
             "    Costs/mo: "
             f"P&I ${rec.monthly_mortgage_pi:,.0f}, Tax ${rec.monthly_taxes:,.0f}, "
             f"Ins ${rec.monthly_insurance:,.0f}, Maint ${rec.monthly_maintenance:,.0f}, "
-            f"Mgmt ${rec.monthly_management:,.0f}, Vacancy ${rec.monthly_vacancy:,.0f}, "
+            f"Mgmt ${rec.monthly_management:,.0f}, Vacancy ${rec.monthly_vacancy:,.0f}, PMI ${rec.monthly_pmi:,.0f}, "
             f"HOA ${rec.monthly_hoa:,.0f}"
         )
         print(
