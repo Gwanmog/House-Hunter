@@ -72,6 +72,7 @@ with col_a:
     max_price = st.number_input("Max Purchase Price", min_value=50000, value=secret_int("DEFAULT_MAX_PRICE", 900000), step=10000)
     max_down_payment = st.number_input("Max Down Payment", min_value=1000, value=secret_int("DEFAULT_MAX_DOWN_PAYMENT", 300000), step=5000)
     min_bedrooms = st.number_input("Min Bedrooms", min_value=0.0, value=0.0, step=0.5)
+    min_bathrooms = st.number_input("Min Bathrooms", min_value=0.0, value=0.0, step=0.5)
 
 with col_b:
     interest_rate = st.number_input("Interest Rate (%)", min_value=0.0, value=secret_float("DEFAULT_INTEREST_RATE", 7.25), step=0.05)
@@ -86,12 +87,11 @@ with col_b:
 
 with col_c:
     maintenance_rate = st.number_input("Maintenance Rate (pct of rent)", min_value=0.0, value=secret_float("DEFAULT_MAINTENANCE_RATE", 0.05), step=0.01)
-    management_rate = st.number_input("Management Rate (pct of rent)", min_value=0.0, value=secret_float("DEFAULT_MANAGEMENT_RATE", 0.08), step=0.01, help="Typical PM rates are commonly 8-12% depending on market and service level.")
+    management_rate = st.number_input("Management Rate (pct of rent)", min_value=0.0, value=secret_float("DEFAULT_MANAGEMENT_RATE", 0.10), step=0.01, help="Typical PM rates are commonly 8-12% depending on market and service level.")
     vacancy_rate = st.number_input("Vacancy Rate (pct of rent)", min_value=0.0, value=secret_float("DEFAULT_VACANCY_RATE", 0.05), step=0.01, help="Example: 8.3% means ~1 month vacant per year. 4.2% means ~2 weeks.")
     pmi_rate = st.number_input("PMI rate when <20% down (annual)", min_value=0.0, value=0.008, step=0.001, format="%.3f")
 
 property_types = st.multiselect("Property type filter", ["single_family", "condo", "townhome", "multi_family", "apartment"], default=[])
-min_bathrooms = st.number_input("Min Bathrooms", min_value=0.0, value=0.0, step=0.5)
 
 st.info("Default mode uses live API listings. Most developer/API settings stay hidden in Advanced.")
 
